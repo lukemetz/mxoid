@@ -1,9 +1,8 @@
 import mxnet as mx
-from mxnet.executor import ExecutorManager
-from mxnet.optimizer import UpdateManager
+from mxnet.executor import DataParallelExecutorManager
 import logging
 from accumulator import LoopAccumulator
-from mxnet.model import _create_kvstore
+from mxnet.model import _create_kvstore, _initialize_kvstore,_update_params_on_kvstore, _update_params
 logger = logging.getLogger(__name__)
 
 
@@ -53,28 +52,32 @@ class Loop(object):
         (kvstore, update_on_kvstore) = _create_kvstore(
             self.kv, len(self.ctxs), self.model.arg_params)
 
-        self.executor_manager = ExecutorManager(symbol=self.sym,
-                                                ctx=self.ctxs,
-                                                train_data=self.data,
-                                                param_names=param_names,
-                                                arg_names=arg_names,
-                                                aux_names=aux_names,
-                                                logger=logger)
+        self.executor_manager = DataParallelExecutorManager(symbol=self.sym,
+                                                            ctx=self.ctxs,
+                                                            train_data=self.data,
+                                                            param_names=param_names,
+                                                            arg_names=arg_names,
+                                                            aux_names=aux_names,
+                                                            logger=logger)
 
         self.executor_manager.set_params(self.model.arg_params, self.model.aux_params)
 
-        self.updater = UpdateManager(kvstore=kvstore,
-                                update_on_kvstore=update_on_kvstore,
-                                optimizer=self.optimizer,
+        if not update_on_kvstore:
+            updater = get_updater(optimizer)
+
+        if kvstore:
+            _initialize_kvstore(kvstore=kvstore,
                                 param_arrays=self.executor_manager.param_arrays,
                                 arg_params=self.model.arg_params,
                                 param_names=self.executor_manager.param_names,
-                                ctx=self.ctxs)
+                                update_on_kvstore=update_on_kvstore)
+
+        if update_on_kvstore:
+            kvstore.set_optimizer(self.optimizer)
 
         for e in self.before_training_extentions:
             e(self)
 
-        # Now start training
         while True:
             self.metric.reset()
             nbatch = 0
@@ -86,8 +89,16 @@ class Loop(object):
                 self.executor_manager.forward(is_train=True)
                 self.executor_manager.backward()
 
-                self.updater.do_update(self.executor_manager.param_arrays,
-                                       self.executor_manager.grad_arrays)
+                if update_on_kvstore:
+                    _update_params_on_kvstore(self.executor_manager.param_arrays,
+                                              self.executor_manager.grad_arrays,
+                                              kvstore)
+                else:
+                    _update_params(self.executor_manager.param_arrays,
+                                   self.executor_manager.grad_arrays,
+                                   updater=updater,
+                                   num_device=len(self.model.ctx),
+                                   kvstore=kvstore)
 
                 # evaluate at end, so out_cpu_array can lazy copy
                 self.metric.update(data_batch.label, self.executor_manager.cpu_output_arrays)
