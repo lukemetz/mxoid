@@ -25,9 +25,9 @@ class Loop(object):
             initializer        = mx.init.Normal(0.02))
 
         self.ctxs = devs
-        self.batch_extentions = []
-        self.epoch_extentions = []
-        self.before_training_extentions = []
+        self.batch_extensions = []
+        self.epoch_extensions = []
+        self.before_training_extensions = []
 
         self.log = {}
         self.status = {}
@@ -37,10 +37,10 @@ class Loop(object):
 
         self.metric = LoopAccumulator(self.sym)
 
-    def add_extention(self, ext):
-        self.batch_extentions.append(ext._every_batch)
-        self.epoch_extentions.append(ext._every_epoch)
-        self.before_training_extentions.append(ext._before_training)
+    def add_extension(self, ext):
+        self.batch_extensions.append(ext._every_batch)
+        self.epoch_extensions.append(ext._every_epoch)
+        self.before_training_extensions.append(ext._before_training)
 
     def run(self):
         data = self.model._init_iter(self.data, None, is_train=True)
@@ -75,7 +75,7 @@ class Loop(object):
         if update_on_kvstore:
             kvstore.set_optimizer(self.optimizer)
 
-        for e in self.before_training_extentions:
+        for e in self.before_training_extensions:
             e(self)
 
         while True:
@@ -108,11 +108,11 @@ class Loop(object):
                 self.log[self.status['iterations']] = dict(iterations=self.status['iterations'])
                 self.current_log = self.log[self.status['iterations']]
 
-                for e in self.batch_extentions:
+                for e in self.batch_extensions:
                     e(self)
                 nbatch += 1
             self.status['epochs'] += 1
             self.status['epoch_iterations'] = 0
 
-            for e in self.epoch_extentions:
+            for e in self.epoch_extensions:
                 e(self)
