@@ -8,7 +8,7 @@ from mxnet.model import save_checkpoint
 import logging
 logger = logging.getLogger(__name__)
 
-class Extention(object):
+class Extension(object):
     def __init__(self, every_epoch=False, every_n_batches=None, before_training=False):
         self.every_epoch = every_epoch
         self.every_n_batches = every_n_batches
@@ -29,7 +29,7 @@ class Extention(object):
     def do(self, loop):
         raise NotImplemented()
 
-class ExamplesPerSecond(Extention):
+class ExamplesPerSecond(Extension):
     def __init__(self, batch_size, **kwargs):
         self.batch_size = batch_size
         self.init = False
@@ -52,7 +52,7 @@ class ExamplesPerSecond(Extention):
             self.init = True
             self.tic = time.time()
 
-class TrainMonitor(Extention):
+class TrainMonitor(Extension):
     def __init__(self, prefix, **kwargs):
         self.prefix = prefix
         super(TrainMonitor, self).__init__(**kwargs)
@@ -62,7 +62,7 @@ class TrainMonitor(Extention):
             loop.current_log["%s_%s"%(self.prefix, name)] = val / loop.metric.num_inst
         loop.metric.reset()
 
-class EvalMonitor(Extention):
+class EvalMonitor(Extension):
     def __init__(self, data, symbol, prefix, **kwargs):
         super(EvalMonitor, self).__init__(**kwargs)
         self.metric = LoopAccumulator(symbol)
@@ -83,7 +83,7 @@ class EvalMonitor(Extention):
         for name, val in zip(names, self.metric.buff):
             loop.current_log["%s_%s"%(self.prefix, name)] = val / self.metric.num_inst
 
-class Printing(Extention):
+class Printing(Extension):
     def do(self, loop):
         print "=============================="
         print "== Status =="
@@ -93,7 +93,7 @@ class Printing(Extention):
         for name, val in loop.current_log.items():
             print "\t%s: %s"%(name, str(val))
 
-class NDJsonLogger(Extention):
+class NDJsonLogger(Extension):
     def __init__(self, filepath, **kwargs):
         self.keys_written = set()
         self.file_ = None
@@ -109,15 +109,15 @@ class NDJsonLogger(Extention):
         self.file_.flush()
         self.keys_written = self.keys_written.union(to_write)
 
-class FuncExtention(Extention):
+class FuncExtension(Extension):
     def __init__(self, func, **kwargs):
         self.func = func
-        super(FuncExtention, self).__init__(**kwargs)
+        super(FuncExtension, self).__init__(**kwargs)
 
     def do(self, loop):
         self.func(loop)
 
-class DirectoryCreator(Extention):
+class DirectoryCreator(Extension):
     def __init__(self, directory, **kwargs):
         kwargs.setdefault("before_training", True)
         self.once = False
@@ -138,7 +138,7 @@ class DirectoryCreator(Extention):
         exp_name = directory.split("/")[-1]
         loop.status['exp_name'] = exp_name
 
-class SourceSaver(Extention):
+class SourceSaver(Extension):
     """
     Save the source to a given folder
 
@@ -176,7 +176,7 @@ class SourceSaver(Extention):
         self.once = True
         self.write_src()
 
-class SaveCheckpoint(Extention):
+class SaveCheckpoint(Extension):
     def __init__(self, prefix,  **kwargs):
         self.prefix = prefix
         kwargs.setdefault("every_epoch", True)
